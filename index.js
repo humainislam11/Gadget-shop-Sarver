@@ -1,59 +1,98 @@
-const express = require("express")
+const express = require("express");
 const cors = require("cors");
-const jwt = require("jsonwebtoken")
+const jwt = require("jsonwebtoken");
 const { MongoClient, ServerApiVersion } = require("mongodb");
-require('dotenv').config()
+require('dotenv').config();
 
-const app = express()
-
+const app = express();
 const port = process.env.PORT || 4000;
 
-//middleware
-app.use(cors())
-app.use(express.json())
+// Middleware
+app.use(cors({
+  origin: "http://localhost:5173",
+  optionsSuccessStatus: 200,
+}));
+app.use(express.json());
 
-
-//mongodb
-const url = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.fbfpgjp.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
-
+// MongoDB connection
+const url = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.fbfpgjp.mongodb.net/?retryWrites=true&w=majority`;
 const client = new MongoClient(url, {
-    serverApi: {
-      version: ServerApiVersion.v1,
-      strict: true,
-      deprecationErrors: true,
-    }
-  });
-
-  const dbConnect = async()=>{
-    try{
-       client.connect()
-       console.log("Database connected successfully")
-    }catch(error){
-        console.log(error.name,error.message)
-    }
+  serverApi: {
+    version: ServerApiVersion.v1,
   }
+});
 
-  dbConnect()
+const userCollection = client.db('gadget-shop').collection('user');
+const productCollection = client.db('gadget-shop').collection('product');
 
-//api
+// JWT middleware
+const verifyJWT = (req, res, next) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) {
+    return res.status(401).send({ message: "Unauthorized access" });
+  }
+  jwt.verify(token, process.env.ACCESS_KEY_TOKEN, (err, decoded) => {
+    if (err) {
+      return res.status(403).send({ message: "Forbidden access" });
+    }
+    req.decoded = decoded;
+    next();
+  });
+};
 
-app.get("/",(req,res)=>{
-    res.send("Server is running")
-})
+// Database connection function
+const dbConnect = async () => {
+  try {
+    await client.connect();
+    console.log("Database connected successfully");
 
+    // Get user
+   
 
+    // Insert user
+    app.post("/users", async (req, res) => {
+      const user = req.body;
+      const query = { email: user.email };
+      const existingUser = await userCollection.findOne(query);
+      if (existingUser) {
+        return res.send({ message: "User already exists" });
+      }
+      const result = await userCollection.insertOne(user);
+      res.send(result);
+    });
 
+  } catch (error) {
+    console.error("Database connection error:", error);
+  }
+};
 
+dbConnect();
 
-//jwt
-app.post('/authentication', async(req,res)=>{
+// Root route
+app.get("/", (req, res) => {
+  res.send("Server is running");
+});
+
+// JWT Authentication
+app.post('/authentication', (req, res) => {
   const userEmail = req.body;
-  const token = jwt.sign(userEmail, process.env.ACCESS_KEY_TOKEN,{expiresIn: '10d'});
-  res.send({token})
-})
+  const token = jwt.sign(userEmail, process.env.ACCESS_KEY_TOKEN, { expiresIn: '10d' });
+  res.send({ token });
+});
 
+// Protected route example
+app.get('/protected', verifyJWT, (req, res) => {
+  res.send({ message: "This is a protected route", user: req.decoded });
+});
 
+// Start server
+app.listen(port, () => {
+  console.log(`Server is running on port ${port}`);
+});
 
-app.listen(port , ()=>{
-    console.log(`server is running on port ${port}`)
-})
+// Handle server termination and close MongoDB connection
+process.on('SIGINT', async () => {
+  await client.close();
+  console.log("Database connection closed.");
+  process.exit(0);
+});
