@@ -14,6 +14,34 @@ app.use(cors({
 }));
 app.use(express.json());
 
+
+// JWT middleware
+const verifyJWT = (req, res, next) => {
+  const authorization = req.headers.authorization;
+  if (authorization) {
+    return res.send({ message: "Unauthorized access" });
+  }
+  const token = authorization.split(' ')[1];
+
+  jwt.verify(token, process.env.ACCESS_KEY_TOKEN, (err, decoded) => {
+    if (err) {
+      return res.send({ message: "Invalid token" });
+    }
+    req.decoded = decoded;
+    next();
+  });
+};
+///verifySeller
+const verifySeller = async (req,res,next)=>{
+   const email = req.decoded.email;
+   const query = {email : email};
+   const user = await userCollection.findOne(query);
+   if(user?.role !== "seller"){
+    return res.send({message: "Forbidden Access"})
+   }
+   next();
+}
+
 // MongoDB connection
 const url = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.fbfpgjp.mongodb.net/?retryWrites=true&w=majority`;
 const client = new MongoClient(url, {
@@ -25,20 +53,6 @@ const client = new MongoClient(url, {
 const userCollection = client.db('gadget-shop').collection('user');
 const productCollection = client.db('gadget-shop').collection('product');
 
-// JWT middleware
-const verifyJWT = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) {
-    return res.status(401).send({ message: "Unauthorized access" });
-  }
-  jwt.verify(token, process.env.ACCESS_KEY_TOKEN, (err, decoded) => {
-    if (err) {
-      return res.status(403).send({ message: "Forbidden access" });
-    }
-    req.decoded = decoded;
-    next();
-  });
-};
 
 // Database connection function
 const dbConnect = async () => {
@@ -47,7 +61,20 @@ const dbConnect = async () => {
     console.log("Database connected successfully");
 
     // Get user
-   
+    app.get("/user/:email", async (req, res) => {
+      const query = { email: req.params.email };
+      const user = await userCollection.findOne(query);
+      res.send(user);
+    });
+
+
+    //add product
+
+    app.post("/addProduct",verifyJWT,verifySeller ,async(req,res)=>{
+      const product = req.body;
+      const result = await productCollection.insertOne(product);
+      res.send(result)
+    })
 
     // Insert user
     app.post("/users", async (req, res) => {
@@ -80,10 +107,7 @@ app.post('/authentication', (req, res) => {
   res.send({ token });
 });
 
-// Protected route example
-app.get('/protected', verifyJWT, (req, res) => {
-  res.send({ message: "This is a protected route", user: req.decoded });
-});
+
 
 // Start server
 app.listen(port, () => {
