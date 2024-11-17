@@ -79,6 +79,35 @@ const dbConnect = async () => {
       res.send(result);
     });
 
+////get Product
+
+app.get("/allProduct", async(req,res)=>{
+    const {productTitle, sort, category,brand} = req.query
+    const query ={}
+
+
+    if(productTitle){
+      query.productTitle = { $regex: productTitle, $options: "i"};
+    }
+    if(category){
+      query.category = { $regex: category, $options: "i"};
+    }
+    if(brand){
+      query.brand = brand
+    }
+
+    const sortOption = sort === 'asc' ? 1 : -1;
+
+    const products = await productCollection.find(query).sort({price: sortOption}).toArray();
+    res.json(products);
+})
+
+
+
+
+
+
+
     // Insert User
     app.post("/users", async (req, res) => {
       const user = req.body;
