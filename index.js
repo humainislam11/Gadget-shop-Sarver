@@ -144,6 +144,18 @@ app.get('/wishlist/:userId', verifyJWT, async(req,res)=>{
    res.send(wishlist)
 })
 
+//remove from wishlist
+app.patch('/wishlist/remove',  async(req,res)=>{
+  const {userEmail , productId} = req.body;
+  const result = await userCollection.updateOne(
+    {email: userEmail},
+    {$pull: {wishlist: new ObjectId(String(productId))}}
+  );
+
+  res.send(result)
+  
+});
+
 
 
 
