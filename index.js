@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 require("dotenv").config();
 
 const app = express();
@@ -82,7 +82,7 @@ const dbConnect = async () => {
 ////get Product
 
 app.get("/allProduct", async(req,res)=>{
-    const {productTitle, sort, category,brand} = req.query
+    const {productTitle, sort, category,brand,page = 1, limit = 9} = req.query
     const query ={}
 
 
@@ -96,10 +96,52 @@ app.get("/allProduct", async(req,res)=>{
       query.brand = brand
     }
 
+    const pageNumber = Number(page)
+    const limitNumber = Number(limit)
+
     const sortOption = sort === 'asc' ? 1 : -1;
 
-    const products = await productCollection.find(query).sort({price: sortOption}).toArray();
-    res.json(products);
+    const products = await productCollection.find(query)
+    .skip((pageNumber -1)*limitNumber)
+    .limit(limitNumber)
+    .sort({price: sortOption})
+    .toArray();
+
+    const totalProducts = await productCollection.countDocuments(query)
+    
+
+    
+
+    const brands = [...new Set(products.map((product)=> product.brand))];
+    const categories = [...new Set(products.map((product)=> product.category))];
+    res.json({products,brands,categories,totalProducts});
+});
+
+
+
+app.patch('/wishlist/add',  async(req,res)=>{
+  const {userEmail , productId} = req.body;
+  const result = await userCollection.updateOne(
+    {email: userEmail},
+    {$addToSet: {wishlist: new ObjectId(String(productId))}}
+  );
+
+  res.send(result)
+  
+});
+
+
+///get user wishlist
+
+app.get('/wishlist/:userId', verifyJWT, async(req,res)=>{
+   const userId = req.params.userId;
+   const user = await userCollection.findOne({_id: new ObjectId(String(userId))});
+   if(!user){
+    return res.send({message: "user not found"})
+   }
+
+   const wishlist = await productCollection.find({ _id:{$in: user.wishlist || []}}).toArray();
+   res.send(wishlist)
 })
 
 
